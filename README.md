@@ -1,4 +1,4 @@
-# 🔍 Fraud Detection System
+# 🔍 FraudDB: Fraud Detection System
 > A production-style fraud detection pipeline built with PostgreSQL, scikit-learn, and Streamlit.
 
 ---
