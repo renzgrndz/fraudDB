@@ -87,34 +87,50 @@ TYPE_DUMMIES = ["type_TRANSFER", "type_CASH_OUT", "type_PAYMENT", "type_CASH_IN"
 # ─────────────────────────────────────────────────────────────────────────────
 # DATA LOADING
 # ─────────────────────────────────────────────────────────────────────────────
-def load_features(engine) -> pd.DataFrame:
-    """Load ML feature set from PostgreSQL analytics materialized view."""
+def load_features(engine, sample_legit: int = 500_000) -> pd.DataFrame:
+    """
+    Load all fraud rows + a sample of legitimate rows.
+    Loading all 6M rows causes out-of-memory during SMOTE.
+    We keep all fraud (rare ~8k rows) and sample 500k legitimate.
+    """
     log.info("Loading features from analytics.mv_ml_features ...")
-    query = text("""
-        SELECT
-            transaction_id,
-            type_name,
-            amount,
-            sender_balance_pre,
-            sender_balance_post,
-            recip_balance_pre,
-            recip_balance_post,
-            sender_balance_drop,
-            recipient_balance_gain,
-            dest_balance_mismatch,
-            sender_drained,
-            dest_was_empty,
-            sender_txns_same_step,
-            sender_amount_zscore,
-            sender_total_txns,
-            sender_avg_amount,
-            sender_unique_recipients,
-            is_fraud
+
+    fraud_query = text("""
+        SELECT transaction_id, type_name, amount,
+            sender_balance_pre, sender_balance_post,
+            recip_balance_pre, recip_balance_post,
+            sender_balance_drop, recipient_balance_gain,
+            dest_balance_mismatch, sender_drained, dest_was_empty,
+            sender_txns_same_step, sender_amount_zscore,
+            sender_total_txns, sender_avg_amount,
+            sender_unique_recipients, is_fraud
         FROM analytics.mv_ml_features
+        WHERE is_fraud = TRUE
     """)
+
+    legit_query = text(f"""
+        SELECT transaction_id, type_name, amount,
+            sender_balance_pre, sender_balance_post,
+            recip_balance_pre, recip_balance_post,
+            sender_balance_drop, recipient_balance_gain,
+            dest_balance_mismatch, sender_drained, dest_was_empty,
+            sender_txns_same_step, sender_amount_zscore,
+            sender_total_txns, sender_avg_amount,
+            sender_unique_recipients, is_fraud
+        FROM analytics.mv_ml_features
+        WHERE is_fraud = FALSE
+        ORDER BY RANDOM()
+        LIMIT {sample_legit}
+    """)
+
     with engine.connect() as conn:
-        df = pd.read_sql(query, conn)
-    log.info(f"Loaded {len(df):,} rows. Fraud rate: {df['is_fraud'].mean():.4%}")
+        df_fraud = pd.read_sql(fraud_query, conn)
+        log.info(f"Loaded {len(df_fraud):,} fraud rows")
+        df_legit = pd.read_sql(legit_query, conn)
+        log.info(f"Loaded {len(df_legit):,} legitimate rows (sampled)")
+
+    df = pd.concat([df_fraud, df_legit], ignore_index=True)
+    log.info(f"Total: {len(df):,} rows. Fraud rate: {df['is_fraud'].mean():.4%}")
     return df
 
 
@@ -194,7 +210,7 @@ def build_rf_pipeline():
             max_depth=12,
             min_samples_leaf=5,
             class_weight="balanced_subsample",
-            n_jobs=-1,
+            n_jobs=1,
             random_state=42,
         )),
     ])
