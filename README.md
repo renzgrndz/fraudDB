@@ -1,4 +1,4 @@
-# 🔍 Fraud Detection System
+# 🔍 FraudDB: Fraud Detection System
 > A production-style fraud detection pipeline built with PostgreSQL, scikit-learn, and Streamlit.
 
 ---
@@ -62,7 +62,7 @@ FDS_R1/
 ├── queries.sql                 # Analytical & validation queries
 ├── paysim_100k.csv             # Sampled dataset (100k rows)
 ├── requirements.txt            # Python dependencies
-├── .env.database               # Database credentials
+├── .env                        # Database credentials
 └── README.md                   # This file
 ```
 
